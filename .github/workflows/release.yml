@@ -1,0 +1,31 @@
+name: Build and Release IPA
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify
+
+      - name: Build unsigned IPA
+        run: make ipa-unsigned
+
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: build/export/devicekit.h264.ipa

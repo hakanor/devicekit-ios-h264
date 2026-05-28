@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  lint-and-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify
+
+      - name: Lint
+        run: make lint
+
+      - name: Build unsigned IPA
+        run: make ipa-unsigned
