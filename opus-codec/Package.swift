@@ -64,6 +64,7 @@ let package = Package(
                 "silk/meson.build",
                 "silk/mips",
                 "silk/tests",
+                "silk/float/x86",
                 "silk/x86",
                 "src/meson.build",
                 "src/opus_compare.c",
