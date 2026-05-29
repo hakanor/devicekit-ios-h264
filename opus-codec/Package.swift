@@ -69,6 +69,7 @@ let package = Package(
                 "src/meson.build",
                 "src/opus_compare.c",
                 "src/opus_demo.c",
+                "src/qext_compare.c",
                 "src/repacketizer_demo.c",
                 "tests",
                 "tar_list.txt",
