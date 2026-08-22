@@ -40,6 +40,17 @@ public final class H264Encoder: NSObject {
     private var session: VTCompressionSession?
     private var pendingForceKeyFrame = false
 
+    // Last frame handed to the encoder, kept so a newly connected client can get
+    // a keyframe immediately. ReplayKit only delivers samples when the screen
+    // changes, so on a static screen "force keyframe on next frame" would never
+    // fire — re-encoding the last frame is the only way to guarantee a decodable
+    // first frame. Guarded by lastFrameLock: written from ReplayKit's sample
+    // thread, read from the TCP connection queue.
+    private let lastFrameLock = NSLock()
+    private var lastPixelBuffer: CVPixelBuffer?
+    private var lastPresentationTimeStamp = CMTime.invalid
+    private var lastDuration = CMTime.invalid
+
     private static let naluStartCode = Data([UInt8](arrayLiteral: 0x00, 0x00, 0x00, 0x01))
 
     // uuid for timing SEI (user data unregistered)
@@ -120,6 +131,46 @@ public final class H264Encoder: NSObject {
         pendingForceKeyFrame = true
     }
 
+    /// Re-encodes the most recent frame as a keyframe right now, so a client
+    /// that connects while the screen is static still receives SPS/PPS+IDR
+    /// instead of waiting for the next screen change. Falls back to forcing the
+    /// next real frame when nothing has been encoded yet.
+    public func reencodeLastFrameAsKeyFrame() {
+        forceNextKeyFrame()
+
+        lastFrameLock.lock()
+        let pixelBuffer = lastPixelBuffer
+        let lastPTS = lastPresentationTimeStamp
+        let duration = lastDuration
+        lastFrameLock.unlock()
+
+        guard let session, let pixelBuffer, lastPTS.isValid else { return }
+
+        // PTS must keep increasing. ReplayKit stamps frames with the host clock,
+        // so "now" is safe; the max() guards against reconnects within one frame.
+        let step = duration.isValid && duration.value > 0 ? duration : CMTime(value: 1, timescale: 30)
+        let pts = CMTimeMaximum(CMClockGetTime(CMClockGetHostTimeClock()), CMTimeAdd(lastPTS, step))
+
+        VTCompressionSessionEncodeFrame(
+            session,
+            imageBuffer: pixelBuffer,
+            presentationTimeStamp: pts,
+            duration: duration,
+            frameProperties: nextFrameProperties(),
+            sourceFrameRefcon: nil,
+            infoFlagsOut: nil
+        )
+        rememberLastFrame(pixelBuffer, presentationTimeStamp: pts, duration: duration)
+    }
+
+    private func rememberLastFrame(_ pixelBuffer: CVPixelBuffer, presentationTimeStamp: CMTime, duration: CMTime) {
+        lastFrameLock.lock()
+        lastPixelBuffer = pixelBuffer
+        lastPresentationTimeStamp = presentationTimeStamp
+        lastDuration = duration
+        lastFrameLock.unlock()
+    }
+
     public func invalidateCompressionSession() {
         guard let session = session else {
             return
@@ -127,6 +178,10 @@ public final class H264Encoder: NSObject {
 
         VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
         VTCompressionSessionInvalidate(session)
+        lastFrameLock.lock()
+        lastPixelBuffer = nil
+        lastPresentationTimeStamp = .invalid
+        lastFrameLock.unlock()
     }
 
     // swiftlint:disable closure_parameter_position
@@ -238,6 +293,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(rotatedPixelBuffer, presentationTimeStamp: timeStamp, duration: duration)
     }
 
     public func encode(
@@ -261,6 +317,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(rotatedPixelBuffer, presentationTimeStamp: timestamp, duration: .invalid)
     }
 
     public func encode(
@@ -278,6 +335,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(pixelBuffer, presentationTimeStamp: timestamp, duration: .invalid)
     }
 
     public func encode(
