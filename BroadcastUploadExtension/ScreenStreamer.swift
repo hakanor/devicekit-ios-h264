@@ -59,8 +59,11 @@ final class ScreenStreamer {
             tcpServer.dataHandler?(data)
         }
 
+        // A client connecting on a static screen would otherwise wait for the
+        // next screen change (ReplayKit delivers no samples until then) before
+        // it ever sees a keyframe — re-encode the last frame as IDR right away.
         tcpServer.onClientConnected = { [weak self] in
-            self?.h264Encoder.forceNextKeyFrame()
+            self?.h264Encoder.reencodeLastFrameAsKeyFrame()
         }
 
         if let audioPort = config.audioPort {

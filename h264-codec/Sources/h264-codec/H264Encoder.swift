@@ -37,8 +37,14 @@ public final class H264Encoder: NSObject {
         case cannotPrepareToEncode
     }
 
-    private var session: VTCompressionSession?
-    private var pendingForceKeyFrame = false
+    var session: VTCompressionSession?
+    var pendingForceKeyFrame = false
+
+    // Last frame handed to the encoder; see H264Encoder+KeyFrame.swift.
+    let lastFrameLock = NSLock()
+    var lastPixelBuffer: CVPixelBuffer?
+    var lastPresentationTimeStamp = CMTime.invalid
+    var lastDuration = CMTime.invalid
 
     private static let naluStartCode = Data([UInt8](arrayLiteral: 0x00, 0x00, 0x00, 0x01))
 
@@ -116,10 +122,6 @@ public final class H264Encoder: NSObject {
               (newFrameRate.map { ", frameRate=\($0)" } ?? ""))
     }
 
-    public func forceNextKeyFrame() {
-        pendingForceKeyFrame = true
-    }
-
     public func invalidateCompressionSession() {
         guard let session = session else {
             return
@@ -127,6 +129,7 @@ public final class H264Encoder: NSObject {
 
         VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
         VTCompressionSessionInvalidate(session)
+        forgetLastFrame()
     }
 
     // swiftlint:disable closure_parameter_position
@@ -238,6 +241,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(rotatedPixelBuffer, presentationTimeStamp: timeStamp, duration: duration)
     }
 
     public func encode(
@@ -261,6 +265,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(rotatedPixelBuffer, presentationTimeStamp: timestamp, duration: .invalid)
     }
 
     public func encode(
@@ -278,6 +283,7 @@ public final class H264Encoder: NSObject {
             sourceFrameRefcon: nil,
             infoFlagsOut: nil
         )
+        rememberLastFrame(pixelBuffer, presentationTimeStamp: timestamp, duration: .invalid)
     }
 
     public func encode(
@@ -300,12 +306,6 @@ public final class H264Encoder: NSObject {
 }
 
 private extension H264Encoder {
-    func nextFrameProperties() -> CFDictionary? {
-        guard pendingForceKeyFrame else { return nil }
-        pendingForceKeyFrame = false
-        return [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary
-    }
-
     func extractSPSAndPPS(from sampleBuffer: CMSampleBuffer) {
         guard let description = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
 
