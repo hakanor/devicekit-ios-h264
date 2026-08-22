@@ -79,7 +79,11 @@ public final class H264Encoder: NSObject {
             kVTCompressionPropertyKey_PixelTransferProperties: [
                 kVTPixelTransferPropertyKey_ScalingMode: kVTScalingMode_Normal
             ],
-            kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_Baseline_AutoLevel,
+            // High profile matches devicekit-android's AVCProfileHigh and what
+            // webrtc-server now declares in its SDP (profile-level-id=64001f,
+            // see backend PR #378) — a Baseline encoder under a High-profile SDP
+            // declaration is a real decoder-side mismatch, not just a label.
+            kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_High_AutoLevel,
             kVTCompressionPropertyKey_MaxKeyFrameInterval: config.expectedFrameRate,
             kVTCompressionPropertyKey_ExpectedFrameRate: config.expectedFrameRate,
             kVTCompressionPropertyKey_AverageBitRate: config.averageBitRate,
