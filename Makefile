@@ -35,6 +35,11 @@ ipa-unsigned:
 	@rm -rf $(EXPORT_PATH)
 	@mkdir -p $(EXPORT_PATH)/Payload
 	@cp -r "$(ARCHIVE_PATH)/Products/Applications/$(SCHEME).app" $(EXPORT_PATH)/Payload/
+ifneq ($(VERSION),)
+	@echo "Stamping version $(VERSION) into Info.plists..."
+	@plutil -replace CFBundleShortVersionString -string "$(VERSION)" "$(EXPORT_PATH)/Payload/$(SCHEME).app/Info.plist"
+	@plutil -replace CFBundleShortVersionString -string "$(VERSION)" "$(EXPORT_PATH)/Payload/$(SCHEME).app/PlugIns/BroadcastUploadExtension.appex/Info.plist"
+endif
 	@cd $(EXPORT_PATH) && zip -r $(SCHEME).ipa Payload
 	@rm -rf $(EXPORT_PATH)/Payload
 	@echo "IPA created at: $(EXPORT_PATH)/$(SCHEME).ipa"

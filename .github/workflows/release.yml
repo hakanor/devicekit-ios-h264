@@ -21,6 +21,8 @@ jobs:
 
       - name: Build unsigned IPA
         run: make ipa-unsigned
+        env:
+          VERSION: ${{ github.ref_name }}
 
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v3
