@@ -76,17 +76,17 @@ Send JSON-RPC 2.0 messages to the video port (12005) to control the stream at ru
 
 ### Methods
 
-#### `screencapture.setConfiguration`
+#### `screencapture.setBitrate`
 
-Update bitrate and frame rate without restarting the broadcast.
+Update the video bitrate without restarting the broadcast. Same method name
+and payload as devicekit-android's AvcServer control channel.
 
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "screencapture.setConfiguration",
+  "method": "screencapture.setBitrate",
   "params": {
-    "bitrate": 2000000,
-    "frameRate": 15
+    "bps": 2000000
   },
   "id": 1
 }
@@ -94,8 +94,15 @@ Update bitrate and frame rate without restarting the broadcast.
 
 | Field | Range | Description |
 |-------|-------|-------------|
-| `bitrate` | 100,000 – 8,000,000 | Video bitrate in bps (required) |
-| `frameRate` | 1 – 60 | Target frame rate (optional) |
+| `bps` | 100,000 – 10,000,000 | Video bitrate in bps (required); out-of-range values are clamped |
+
+#### `screencapture.requestKeyFrame`
+
+Re-encode the last frame as an IDR immediately (e.g. in response to a viewer PLI).
+
+```json
+{ "jsonrpc": "2.0", "method": "screencapture.requestKeyFrame", "id": 5 }
+```
 
 #### `screencapture.pause`
 

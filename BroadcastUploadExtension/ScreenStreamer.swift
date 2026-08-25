@@ -16,6 +16,11 @@ struct StreamerConfig {
 }
 
 final class ScreenStreamer {
+    // Must match devicekit-android AvcServer's MIN_BITRATE/MAX_BITRATE and
+    // webrtc-server's GCC SendSideBWEMaxBitrate cap.
+    private static let minBitrate = 100_000
+    private static let maxBitrate = 10_000_000
+
     private let h264Encoder: H264Encoder
     private let tcpServer: TCPServer
     private let audioEncoder: OpusAudioEncoder
@@ -115,8 +120,11 @@ final class ScreenStreamer {
         }
 
         switch method {
-        case "screencapture.setConfiguration":
-            handleSetConfiguration(params: json["params"] as? [String: Any])
+        case "screencapture.setBitrate":
+            handleSetBitrate(params: json["params"] as? [String: Any])
+        case "screencapture.requestKeyFrame":
+            h264Encoder.reencodeLastFrameAsKeyFrame()
+            print("[ScreenStreamer] ✓ Requested immediate key frame")
         case "screencapture.pause":
             handlePause()
         case "screencapture.resume":
@@ -128,29 +136,21 @@ final class ScreenStreamer {
         }
     }
 
-    private func handleSetConfiguration(params: [String: Any]?) {
-        guard let params = params,
-              let bitrate = params["bitrate"] as? Int else {
-            print("[ScreenStreamer] Invalid params for setConfiguration")
+    // Same method name, param, and clamp behavior as devicekit-android's
+    // AvcServer control channel, so mobilecli sends one payload for both
+    // platforms. Out-of-range values clamp rather than reject — the REMB
+    // control loop may legitimately ask for more than the encoder ceiling.
+    private func handleSetBitrate(params: [String: Any]?) {
+        guard let bps = params?["bps"] as? Int, bps > 0 else {
+            print("[ScreenStreamer] setBitrate requires a positive 'bps'")
             return
         }
 
-        let frameRate = params["frameRate"] as? Int
-
-        guard bitrate >= 100_000 && bitrate <= 8_000_000 else {
-            print("[ScreenStreamer] Bitrate out of range: \(bitrate) (must be 100000-8000000)")
-            return
-        }
-
-        if let frameRate, frameRate < 1 || frameRate > 60 {
-            print("[ScreenStreamer] Frame rate out of range: \(frameRate) (must be 1-60)")
-            return
-        }
+        let clamped = min(max(bps, Self.minBitrate), Self.maxBitrate)
 
         do {
-            try h264Encoder.updateEncoderSettings(newBitrate: bitrate, newFrameRate: frameRate)
-            print("[ScreenStreamer] ✓ Configuration updated: bitrate=\(bitrate) bps" +
-                  (frameRate.map { ", frameRate=\($0)" } ?? ""))
+            try h264Encoder.updateEncoderSettings(newBitrate: clamped)
+            print("[ScreenStreamer] ✓ Applied live bitrate: \(clamped) bps")
         } catch {
             print("[ScreenStreamer] ✗ Failed to update encoder: \(error)")
         }
