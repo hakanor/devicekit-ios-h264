@@ -30,6 +30,13 @@ class SampleHandler: RPBroadcastSampleHandler {
 
         context = CIContext()
         screenStreamer = ScreenStreamer()
+        screenStreamer?.onStopped = { [weak self] in
+            self?.finishBroadcastWithError(NSError(
+                domain: "com.mobilenext.devicekit-ios.BroadcastUploadExtension",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Stopped via device.h264.stop"]
+            ))
+        }
 
         do {
             try screenStreamer?.start(StreamerConfig(

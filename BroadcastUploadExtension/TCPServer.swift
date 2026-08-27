@@ -13,7 +13,7 @@ public final class TCPServer {
     private var listener: NWListener?
 
     public var dataHandler: ((Data) -> Void)?
-    public var messageHandler: ((Data) -> Void)?
+    public var messageHandler: ((Data, @escaping (Data) -> Void) -> Void)?
     public var onClientConnected: (() -> Void)?
 
     public init() {}
@@ -79,7 +79,9 @@ public final class TCPServer {
             }
 
             if let data = data, !data.isEmpty {
-                self.messageHandler?(data)
+                self.messageHandler?(data) { [weak self] reply in
+                    self?.send(data: reply, on: connection)
+                }
             }
 
             if !isComplete {
